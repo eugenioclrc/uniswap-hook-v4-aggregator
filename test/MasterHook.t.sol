@@ -17,6 +17,8 @@ import {LiquidityAmounts} from "@uniswap/v4-core/test/utils/LiquidityAmounts.sol
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 import {Constants} from "@uniswap/v4-core/test/utils/Constants.sol";
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 import {EasyPosm} from "./utils/libraries/EasyPosm.sol";
 import {Deployers} from "./utils/Deployers.sol";
 
@@ -37,6 +39,8 @@ contract MasterHookTest is Test, Deployers {
 
     MasterHook hook;
     PoolId poolId;
+
+    address user = makeAddr("user");
 
     uint256 tokenId;
     int24 tickLower;
@@ -65,7 +69,7 @@ contract MasterHookTest is Test, Deployers {
         tickLower = TickMath.minUsableTick(poolKey.tickSpacing);
         tickUpper = TickMath.maxUsableTick(poolKey.tickSpacing);
 
-        uint128 liquidityAmount = 100e18;
+        uint128 liquidityAmount = 10e18;
 
         (uint256 amount0Expected, uint256 amount1Expected) = LiquidityAmounts.getAmountsForLiquidity(
             Constants.SQRT_PRICE_1_1,
@@ -88,22 +92,66 @@ contract MasterHookTest is Test, Deployers {
     }
 
     function testCounterHooks() public {
-        poolKey.currency0.transfer(address(hook.vault()), 1e18);
-        poolKey.currency1.transfer(address(hook.vault()), 1e18);
+        poolKey.currency0.transfer(user, 14 ether);
+        poolKey.currency0.transfer(address(hook.vault()), 5 ether);
+        poolKey.currency1.transfer(address(hook.vault()), 5 ether);
 
         // positions were created in setup()
 
+
+        console.log(poolKey.currency0.balanceOf(address(hook.vault())));
+        console.log(poolKey.currency1.balanceOf(address(hook.vault())));
+
+        vm.startPrank(user);
+        IERC20(Currency.unwrap(poolKey.currency0)).approve(address(swapRouter), type(uint256).max);
+
         // Perform a test swap //
-        uint256 amountIn = 1e18;
+        uint256 amountIn = 14 ether;
         BalanceDelta swapDelta = swapRouter.swapExactTokensForTokens({
             amountIn: amountIn,
             amountOutMin: 0, // Very bad, but we want to allow for unlimited price impact
             zeroForOne: true,
             poolKey: poolKey,
             hookData: Constants.ZERO_BYTES,
-            receiver: address(this),
+            receiver: user,
             deadline: block.timestamp + 1
         });
+
+        console.log("userBalance", poolKey.currency0.balanceOf(user));
+        console.log("userBalance", poolKey.currency1.balanceOf(user));
+        vm.stopPrank();
+        // ------------------- //
+
+        console.log(poolKey.currency0.balanceOf(address(hook.vault())));
+        console.log(poolKey.currency1.balanceOf(address(hook.vault())));
+
+        assertEq(int256(swapDelta.amount0()), -int256(amountIn));
+    }
+
+     function testCounterHooks2() public {
+        poolKey.currency0.transfer(user, 14 ether);
+
+        // positions were created in setup()
+
+
+        vm.startPrank(user);
+        IERC20(Currency.unwrap(poolKey.currency0)).approve(address(swapRouter), type(uint256).max);
+
+        // Perform a test swap //
+        uint256 amountIn = 14 ether;
+        BalanceDelta swapDelta = swapRouter.swapExactTokensForTokens({
+            amountIn: amountIn,
+            amountOutMin: 0, // Very bad, but we want to allow for unlimited price impact
+            zeroForOne: true,
+            poolKey: poolKey,
+            hookData: Constants.ZERO_BYTES,
+            receiver: user,
+            deadline: block.timestamp + 1
+        });
+
+        console.log("userBalance", poolKey.currency0.balanceOf(user));
+        console.log("userBalance", poolKey.currency1.balanceOf(user));
+        vm.stopPrank();
         // ------------------- //
 
         console.log(poolKey.currency0.balanceOf(address(hook.vault())));
