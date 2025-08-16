@@ -8,6 +8,19 @@ import {ERC4626, ERC20} from "solmate/src/mixins/ERC4626.sol";
 contract Vault is ERC4626 {
     using SafeERC20 for IERC20;
 
+    // WETH
+    address constant t0 = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    // wstETH (Lido Wrapped stETH)
+    address constant t1 = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
+    // rETH (Rocket Pool ETH)
+    address constant t2 = 0xae78736Cd615f374D3085123A210448E74Fc6393;
+    // weETH (Ether.fi Wrapped eETH)
+    address constant t3 = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
+
+    // oracles
+    address constant oracleSTETH_ETH = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
+    address constant oracleRETH_ETH = 0x536218f9E9Eb48863970252233c8F271f554C2d0;
+    address constant oracleWEETH_ETH = 0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22;
 
     address public owner;
 
@@ -24,6 +37,6 @@ contract Vault is ERC4626 {
     }
 
     function totalAssets() public view override returns (uint256) {
-        return 0;
+        return ;
     }
 }
