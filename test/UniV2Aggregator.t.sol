@@ -67,7 +67,7 @@ contract UniV2AggregatorTest is Test, Deployers {
 
         // deploy UNISWAP V2 for test
         uniswapV2Factory = IUniswapV2Factory(deployCode("./test/UniswapV2Factory.json", abi.encode(address(0))));
-        
+        hook.setFactory(uniswapV2Factory);
 
         // Create the pool
         poolKey = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
