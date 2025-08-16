@@ -2,6 +2,9 @@
   "lib/hookmate": {
     "rev": "776a715181b510d3fceebae54eb153026d7aeadd"
   },
+  "lib/forge-std": {
+    "rev": "ee93fdc45d1e5e4dee883afe0103109881a83549"
+  },
   "lib/uniswap-hooks": {
     "rev": "70f4973c837505965b70886c6108366941554afb"
   },
@@ -11,10 +14,16 @@
       "rev": "4dd59067c76dea4a0e8e4bfdda41877a6b16dedc"
     }
   },
-  "lib/forge-std": {
-    "rev": "ee93fdc45d1e5e4dee883afe0103109881a83549"
-  },
   "lib/v2-periphery": {
     "rev": "0335e8f7e1bd1e8d8329fd300aea2ef2f36dd19f"
+  },
+  "lib/solmate": {
+    "rev": "89365b880c4f3c786bdd453d4b8e8fe410344a69"
+  },
+  "lib/chainlink-evm": {
+    "tag": {
+      "name": "v0.3.1",
+      "rev": "4c24b8aa467916213f80e383bc6b535acb49eb91"
+    }
   }
 }

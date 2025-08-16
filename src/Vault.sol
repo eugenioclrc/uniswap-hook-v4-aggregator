@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC4626, ERC20} from "solmate/src/mixins/ERC4626.sol";
+import {AggregatorV3Interface} from "lib/chainlink-evm/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 contract Vault is ERC4626 {
     using SafeERC20 for IERC20;
@@ -37,6 +38,6 @@ contract Vault is ERC4626 {
     }
 
     function totalAssets() public view override returns (uint256) {
-        return ;
+        return 0;
     }
 }
