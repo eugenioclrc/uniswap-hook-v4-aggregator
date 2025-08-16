@@ -100,6 +100,7 @@ contract MasterHook is BaseHook {
     // 1) Target price boundary (for a very tight JIT band at current price)
     int24 tick = TickMath.getTickAtSqrtPrice(sqrtP);
      tickLower = getLowerUsableTick(tick, key.tickSpacing);
+     tickLower -= key.tickSpacing;
      tickUpper = tickLower + key.tickSpacing;
 
     uint160 sqrtA = TickMath.getSqrtPriceAtTick(tickLower);
