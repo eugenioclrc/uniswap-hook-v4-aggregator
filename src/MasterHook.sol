@@ -91,14 +91,16 @@ contract MasterHook is BaseHook {
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
+        // ensure hook is on a valid route:
+        // WETH-WSTETH, WETH-rETH, WETH-osETH, WETH-weETH
+        // TODO
+
         PoolId id = key.toId();
 
         (uint160 sqrtP,,,) = poolManager.getSlot0(id);
-        uint128 Lpool = poolManager.getLiquidity(id);
 
         // 1) Target price boundary (for a very tight JIT band at current price)
-        int24 tick = TickMath.getTickAtSqrtPrice(sqrtP);
-        tickLower = getLowerUsableTick(tick, key.tickSpacing);
+        tickLower = getLowerUsableTick( TickMath.getTickAtSqrtPrice(sqrtP), key.tickSpacing);
         tickLower -= key.tickSpacing;
         tickUpper = tickLower + key.tickSpacing;
 
@@ -107,29 +109,9 @@ contract MasterHook is BaseHook {
 
         // 2) Estimate this-step swap out (lower bound; good enough to cap JIT)
         //    NOTE: computeSwapStep uses *current* liquidity; that's fine for a cap.
-        (uint160 sqrtNext, uint256 stepIn, uint256 stepOut,) = SwapMath.computeSwapStep(
-            sqrtP,
-            params.zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1,
-            Lpool,
-            params.amountSpecified,
-            key.fee
-        );
+       
 
-        // 3) Read vault balances (caps)
-        uint256 vault0 = key.currency0.balanceOf(address(vault));
-        uint256 vault1 = key.currency1.balanceOf(address(vault));
-
-        // 4) Decide caps for the *outgoing* side of the swap to avoid over-adding.
-        //    We still pass both amounts into getLiquidityForAmounts so we never exceed vault funds on either side.
-        uint256 cap0 = vault0;
-        uint256 cap1 = vault1;
-        if (params.zeroForOne) {
-            // pool will pay out token1; don't try to supply more than stepOut from vault1
-            if (cap1 > stepOut) cap1 = stepOut;
-        } else {
-            // pool will pay out token0
-            if (cap0 > stepOut) cap0 = stepOut;
-        }
+        (uint256 cap0, uint256 cap1) = _calculateCaps(key, params, id, sqrtP);
 
         // Early exit if vault has nothing useful
         if (cap0 == 0 && cap1 == 0) {
@@ -145,7 +127,42 @@ contract MasterHook is BaseHook {
             return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
-        // 6) Add JIT liquidity
+        // 6) Add JIT liquidity and settle amounts
+        // 7) Settle EXACT owed amounts (negative deltas) from the vault
+        _addJITsettleAmounts(key, hookData);
+
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+    }
+
+    function _calculateCaps(PoolKey calldata key, SwapParams calldata params, PoolId id, uint160 sqrtP) internal returns(uint256, uint256) {
+         ( ,  , uint256 stepOut,) = SwapMath.computeSwapStep(
+            sqrtP,
+            params.zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1,
+            poolManager.getLiquidity(id),
+            params.amountSpecified,
+            key.fee
+        );
+        // Read vault balances (caps)
+        uint256 vault0 = key.currency0.balanceOf(address(vault));
+        uint256 vault1 = key.currency1.balanceOf(address(vault));
+
+        // Decide caps for the *outgoing* side of the swap to avoid over-adding.
+        // We still pass both amounts into getLiquidityForAmounts so we never exceed vault funds on either side.
+        uint256 cap0 = vault0;
+        uint256 cap1 = vault1;
+        if (params.zeroForOne) {
+            // pool will pay out token1; don't try to supply more than stepOut from vault1
+            if (cap1 > stepOut) cap1 = stepOut;
+        } else {
+            // pool will pay out token0
+            if (cap0 > stepOut) cap0 = stepOut;
+        }
+
+        return (cap0, cap1);
+    }
+
+
+    function _addJITsettleAmounts(PoolKey calldata key, bytes calldata hookData) internal {
         (BalanceDelta delta,) = poolManager.modifyLiquidity(
             key,
             ModifyLiquidityParams({
@@ -157,7 +174,7 @@ contract MasterHook is BaseHook {
             hookData
         );
 
-        // 7) Settle EXACT owed amounts (negative deltas) from the vault
+
         int256 d0 = delta.amount0();
         int256 d1 = delta.amount1();
 
@@ -173,8 +190,6 @@ contract MasterHook is BaseHook {
             vault.get(Currency.unwrap(key.currency1), owe1);
             key.currency1.settle(poolManager, address(this), owe1, false);
         }
-
-        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
     function _afterSwap(
