@@ -16,7 +16,7 @@ import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {LiquidityAmounts} from "@uniswap/v4-core/test/utils/LiquidityAmounts.sol";
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 import {Constants} from "@uniswap/v4-core/test/utils/Constants.sol";
-
+import {WETH} from "solmate/src/tokens/WETH.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {EasyPosm} from "./utils/libraries/EasyPosm.sol";
@@ -49,6 +49,10 @@ contract MasterHookTest is Test, Deployers {
     function setUp() public {
         // Deploys all required artifacts.
         deployArtifacts();
+
+        deployMockTokens();
+
+        
 
         (currency0, currency1) = deployCurrencyPair();
 
@@ -90,6 +94,13 @@ contract MasterHookTest is Test, Deployers {
             block.timestamp,
             Constants.ZERO_BYTES
         );
+    }
+
+    function deployMockTokens() internal {
+
+        deployCodeTo("WETH.sol:WETH",hex"",0, 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+        
+       
     }
 
     function testCounterHooks() public {
