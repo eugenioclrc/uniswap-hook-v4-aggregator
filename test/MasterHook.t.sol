@@ -22,6 +22,8 @@ import {Deployers} from "./utils/Deployers.sol";
 
 import {MasterHook} from "../src/MasterHook.sol";
 
+import {console} from "forge-std/console.sol";
+
 contract MasterHookTest is Test, Deployers {
     using EasyPosm for IPositionManager;
     using PoolIdLibrary for PoolKey;
@@ -86,6 +88,9 @@ contract MasterHookTest is Test, Deployers {
     }
 
     function testCounterHooks() public {
+        poolKey.currency0.transfer(address(hook.vault()), 1e18);
+        poolKey.currency1.transfer(address(hook.vault()), 1e18);
+
         // positions were created in setup()
 
         // Perform a test swap //
@@ -100,6 +105,9 @@ contract MasterHookTest is Test, Deployers {
             deadline: block.timestamp + 1
         });
         // ------------------- //
+
+        console.log(poolKey.currency0.balanceOf(address(hook.vault())));
+        console.log(poolKey.currency1.balanceOf(address(hook.vault())));
 
         assertEq(int256(swapDelta.amount0()), -int256(amountIn));
     }

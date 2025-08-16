@@ -14,12 +14,20 @@ import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/lib/v4-core/test/utils/LiquidityAmounts.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {SwapMath} from "@uniswap/v4-periphery/lib/v4-core/src/libraries/SwapMath.sol";
+import {CurrencyLibrary, Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {CurrencySettler} from "lib/uniswap-hooks/src/utils/CurrencySettler.sol";
+
+import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
 
 import {console} from "forge-std/console.sol";
+
+import {Vault} from "./Vault.sol";
 
 contract MasterHook is BaseHook {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
+    using CurrencyLibrary for Currency;
+    using CurrencySettler for Currency;
 
     // NOTE: ---------------------------------------------------------
     // state variables should typically be unique to a pool
@@ -30,7 +38,11 @@ contract MasterHook is BaseHook {
     int24 transient tickLower;
     uint128 transient liquidityDelta;
 
-    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
+    Vault public vault;
+
+    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {
+        vault = new Vault();
+    }
 
     function absoluteValue(int256 value) internal pure returns (uint256) {
         return value >= 0 ? uint256(value) : uint256(-value);
@@ -108,31 +120,68 @@ contract MasterHook is BaseHook {
         liquidityDelta = LiquidityAmounts.getLiquidityForAmount0(sqrtPriceAtTickLower, sqrtPriceAtTickUpper, amount);
 
         console.log("Liquidity delta:");
+        console.logUint(sqrtPriceAtTickLower);
+        console.logUint(sqrtPriceAtTickUpper);
+
+        // Modify liquidity in the pool
+        (BalanceDelta delta,) = poolManager.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({
+                tickLower: tickLower,
+                tickUpper: tickUpper,
+                liquidityDelta: int256(uint256(liquidityDelta)),
+                salt: 0
+            }),
+            hookData
+        );
+
+        int256 delta0 = delta.amount0();
+        int256 delta1 = delta.amount1();
+        console.logInt(delta0);
+        console.logInt(delta1);
+        if (delta0 < 0) {
+            // Withdraw tokens from JIT address (pool) to contract
+            vault.get(Currency.unwrap(key.currency0), uint256(-delta0));
+
+            key.currency0.settle(poolManager, address(this), uint256(-delta0), false);
+        }
+        if (delta1 < 0) {
+            // Withdraw tokens from JIT address (pool) to contract
+            vault.get(Currency.unwrap(key.currency1), uint256(-delta1));
+
+            key.currency1.settle(poolManager, address(this), uint256(-delta1), false);
+        }
 
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
-    function _afterSwap(address, PoolKey calldata key, SwapParams calldata, BalanceDelta, bytes calldata)
-        internal
-        override
-        returns (bytes4, int128)
-    {
+    function _afterSwap(
+        address,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        BalanceDelta delta,
+        bytes calldata data
+    ) internal override returns (bytes4, int128) {
+        (BalanceDelta _delta,) = poolManager.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({
+                tickLower: tickLower,
+                tickUpper: tickUpper,
+                liquidityDelta: -int256(uint256(liquidityDelta)),
+                salt: 0
+            }),
+            data
+        );
+        int256 delta0 = _delta.amount0();
+        int256 delta1 = _delta.amount1();
+
+        if (delta0 > 0) {
+            key.currency0.take(poolManager, address(vault), uint256(delta0), false);
+        }
+        if (delta1 > 0) {
+            key.currency1.take(poolManager, address(vault), uint256(delta1), false);
+        }
+
         return (BaseHook.afterSwap.selector, 0);
-    }
-
-    function _beforeAddLiquidity(address, PoolKey calldata key, ModifyLiquidityParams calldata, bytes calldata)
-        internal
-        override
-        returns (bytes4)
-    {
-        return BaseHook.beforeAddLiquidity.selector;
-    }
-
-    function _beforeRemoveLiquidity(address, PoolKey calldata key, ModifyLiquidityParams calldata, bytes calldata)
-        internal
-        override
-        returns (bytes4)
-    {
-        return BaseHook.beforeRemoveLiquidity.selector;
     }
 }
