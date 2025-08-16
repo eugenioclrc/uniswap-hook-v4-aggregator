@@ -29,6 +29,16 @@ contract MasterHook is BaseHook {
     using CurrencyLibrary for Currency;
     using CurrencySettler for Currency;
 
+    // VALID TOKENS
+    // WETH
+    address constant t0 = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    // wstETH (Lido Wrapped stETH)
+    address constant t1 = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
+    // rETH (Rocket Pool ETH)
+    address constant t2 = 0xae78736Cd615f374D3085123A210448E74Fc6393;
+    // weETH (Ether.fi Wrapped eETH)
+    address constant t3 = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
+
     // NOTE: ---------------------------------------------------------
     // state variables should typically be unique to a pool
     // a single hook contract should be able to service multiple pools
@@ -38,14 +48,10 @@ contract MasterHook is BaseHook {
     int24 transient tickLower;
     uint128 transient liquidityDelta;
 
-    Vault public vault;
+    Vault public immutable vault;
 
     constructor(IPoolManager _poolManager) BaseHook(_poolManager) {
         vault = new Vault();
-    }
-
-    function absoluteValue(int256 value) internal pure returns (uint256) {
-        return value >= 0 ? uint256(value) : uint256(-value);
     }
 
     function getLowerUsableTick(int24 tick, int24 tickSpacing) private pure returns (int24) {
@@ -91,16 +97,25 @@ contract MasterHook is BaseHook {
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
-        // ensure hook is on a valid route:
-        // WETH-WSTETH, WETH-rETH, WETH-osETH, WETH-weETH
-        // TODO
+        // checks
+        {
+            address token0 = Currency.unwrap(key.currency0);
+            address token1 = Currency.unwrap(key.currency1);
+            // Only allow swaps between WETH, WSTETH, rETH, and weETH
+            if (token0 != t0 && token0 != t1 && token0 != t2 && token0 != t3) {
+                return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+            }
+            if (token1 != t0 && token1 != t1 && token1 != t2 && token1 != t3) {
+                return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+            }
+        }
 
         PoolId id = key.toId();
 
         (uint160 sqrtP,,,) = poolManager.getSlot0(id);
 
         // 1) Target price boundary (for a very tight JIT band at current price)
-        tickLower = getLowerUsableTick( TickMath.getTickAtSqrtPrice(sqrtP), key.tickSpacing);
+        tickLower = getLowerUsableTick(TickMath.getTickAtSqrtPrice(sqrtP), key.tickSpacing);
         tickLower -= key.tickSpacing;
         tickUpper = tickLower + key.tickSpacing;
 
@@ -109,7 +124,6 @@ contract MasterHook is BaseHook {
 
         // 2) Estimate this-step swap out (lower bound; good enough to cap JIT)
         //    NOTE: computeSwapStep uses *current* liquidity; that's fine for a cap.
-       
 
         (uint256 cap0, uint256 cap1) = _calculateCaps(key, params, id, sqrtP);
 
@@ -134,8 +148,11 @@ contract MasterHook is BaseHook {
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
-    function _calculateCaps(PoolKey calldata key, SwapParams calldata params, PoolId id, uint160 sqrtP) internal returns(uint256, uint256) {
-         ( ,  , uint256 stepOut,) = SwapMath.computeSwapStep(
+    function _calculateCaps(PoolKey calldata key, SwapParams calldata params, PoolId id, uint160 sqrtP)
+        internal
+        returns (uint256, uint256)
+    {
+        (,, uint256 stepOut,) = SwapMath.computeSwapStep(
             sqrtP,
             params.zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1,
             poolManager.getLiquidity(id),
@@ -161,7 +178,6 @@ contract MasterHook is BaseHook {
         return (cap0, cap1);
     }
 
-
     function _addJITsettleAmounts(PoolKey calldata key, bytes calldata hookData) internal {
         (BalanceDelta delta,) = poolManager.modifyLiquidity(
             key,
@@ -173,7 +189,6 @@ contract MasterHook is BaseHook {
             }),
             hookData
         );
-
 
         int256 d0 = delta.amount0();
         int256 d1 = delta.amount1();
@@ -203,20 +218,6 @@ contract MasterHook is BaseHook {
             // No JIT liquidity was added, nothing to do
             return (BaseHook.afterSwap.selector, 0);
         }
-
-        // should i do this to collect fees?
-        /*
-        poolManager.modifyLiquidity(
-            key,
-            ModifyLiquidityParams({
-                tickLower: tickLower,
-                tickUpper: tickUpper,
-                liquidityDelta: 0,
-                salt: 0
-            }),
-            data
-        );
-        */
 
         (BalanceDelta _delta,) = poolManager.modifyLiquidity(
             key,
