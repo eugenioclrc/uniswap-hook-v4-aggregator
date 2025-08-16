@@ -51,7 +51,7 @@ contract MasterHook is BaseHook {
     Vault public immutable vault;
 
     constructor(IPoolManager _poolManager) BaseHook(_poolManager) {
-        vault = new Vault();
+        vault = new Vault(t0, "Vault multi ETH", "VAULT multi ETH");
     }
 
     function getLowerUsableTick(int24 tick, int24 tickSpacing) private pure returns (int24) {
