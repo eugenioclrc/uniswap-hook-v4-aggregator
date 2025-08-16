@@ -77,7 +77,7 @@ contract MasterHookTest is Test, Deployers {
             TickMath.getSqrtPriceAtTick(tickUpper),
             liquidityAmount
         );
-        console.log("l0",amount0Expected);
+        console.log("l0", amount0Expected);
 
         (tokenId,) = positionManager.mint(
             poolKey,
@@ -98,7 +98,6 @@ contract MasterHookTest is Test, Deployers {
         poolKey.currency1.transfer(address(hook.vault()), 5 ether);
 
         // positions were created in setup()
-
 
         console.log(poolKey.currency0.balanceOf(address(hook.vault())));
         console.log(poolKey.currency1.balanceOf(address(hook.vault())));
@@ -131,11 +130,10 @@ contract MasterHookTest is Test, Deployers {
         assertEq(int256(swapDelta.amount0()), -int256(amountIn));
     }
 
-     function testCounterHooks2() public {
+    function testCounterHooks2() public {
         poolKey.currency0.transfer(user, 14 ether);
 
         // positions were created in setup()
-
 
         vm.startPrank(user);
         IERC20(Currency.unwrap(poolKey.currency0)).approve(address(swapRouter), type(uint256).max);
