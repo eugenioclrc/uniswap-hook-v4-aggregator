@@ -20,9 +20,9 @@ import {Constants} from "@uniswap/v4-core/test/utils/Constants.sol";
 import {EasyPosm} from "./utils/libraries/EasyPosm.sol";
 import {Deployers} from "./utils/Deployers.sol";
 
-import {Counter} from "../src/Counter.sol";
+import {MasterHook} from "../src/MasterHook.sol";
 
-contract CounterTest is Test, Deployers {
+contract MasterHookTest is Test, Deployers {
     using EasyPosm for IPositionManager;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
@@ -33,7 +33,7 @@ contract CounterTest is Test, Deployers {
 
     PoolKey poolKey;
 
-    Counter hook;
+    MasterHook hook;
     PoolId poolId;
 
     uint256 tokenId;
@@ -49,13 +49,13 @@ contract CounterTest is Test, Deployers {
         // Deploy the hook to an address with the correct flags
         address flags = address(
             uint160(
-                Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG
+               Hooks.BEFORE_ADD_LIQUIDITY_FLAG
                     | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
             ) ^ (0x4444 << 144) // Namespace the hook to avoid collisions
         );
         bytes memory constructorArgs = abi.encode(poolManager); // Add all the necessary constructor arguments from the hook
-        deployCodeTo("Counter.sol:Counter", constructorArgs, flags);
-        hook = Counter(flags);
+        deployCodeTo("MasterHook.sol:MasterHook", constructorArgs, flags);
+        hook = MasterHook(flags);
 
         // Create the pool
         poolKey = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
@@ -90,11 +90,6 @@ contract CounterTest is Test, Deployers {
 
     function testCounterHooks() public {
         // positions were created in setup()
-        assertEq(hook.beforeAddLiquidityCount(poolId), 1);
-        assertEq(hook.beforeRemoveLiquidityCount(poolId), 0);
-
-        assertEq(hook.beforeSwapCount(poolId), 0);
-        assertEq(hook.afterSwapCount(poolId), 0);
 
         // Perform a test swap //
         uint256 amountIn = 1e18;
@@ -110,16 +105,9 @@ contract CounterTest is Test, Deployers {
         // ------------------- //
 
         assertEq(int256(swapDelta.amount0()), -int256(amountIn));
-
-        assertEq(hook.beforeSwapCount(poolId), 1);
-        assertEq(hook.afterSwapCount(poolId), 1);
     }
 
     function testLiquidityHooks() public {
-        // positions were created in setup()
-        assertEq(hook.beforeAddLiquidityCount(poolId), 1);
-        assertEq(hook.beforeRemoveLiquidityCount(poolId), 0);
-
         // remove liquidity
         uint256 liquidityToRemove = 1e18;
         positionManager.decreaseLiquidity(
@@ -131,8 +119,5 @@ contract CounterTest is Test, Deployers {
             block.timestamp,
             Constants.ZERO_BYTES
         );
-
-        assertEq(hook.beforeAddLiquidityCount(poolId), 1);
-        assertEq(hook.beforeRemoveLiquidityCount(poolId), 1);
     }
 }
