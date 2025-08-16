@@ -20,7 +20,7 @@ import {Constants} from "@uniswap/v4-core/test/utils/Constants.sol";
 import {EasyPosm} from "./utils/libraries/EasyPosm.sol";
 import {Deployers} from "./utils/Deployers.sol";
 
-import {Counter} from "../src/Counter.sol";
+import {UniV2Aggregator} from "../src/UniV2Aggregator.sol";
 
 import {IUniswapV2Factory} from "../lib/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import {IUniswapV2Pair} from "../lib/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
@@ -28,7 +28,7 @@ import {IUniswapV2Pair} from "../lib/v2-core/contracts/interfaces/IUniswapV2Pair
 import {console} from "forge-std/console.sol";
 
 
-contract CounterTest is Test, Deployers {
+contract UniV2AggregatorTest is Test, Deployers {
     using EasyPosm for IPositionManager;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
@@ -39,7 +39,7 @@ contract CounterTest is Test, Deployers {
 
     PoolKey poolKey;
 
-    Counter hook;
+    UniV2Aggregator hook;
     PoolId poolId;
 
     uint256 tokenId;
@@ -62,8 +62,8 @@ contract CounterTest is Test, Deployers {
             ) ^ (0x4444 << 144) // Namespace the hook to avoid collisions
         );
         bytes memory constructorArgs = abi.encode(poolManager); // Add all the necessary constructor arguments from the hook
-        deployCodeTo("Counter.sol:Counter", constructorArgs, flags);
-        hook = Counter(flags);
+        deployCodeTo("UniV2Aggregator.sol:UniV2Aggregator", constructorArgs, flags);
+        hook = UniV2Aggregator(flags);
 
         // deploy UNISWAP V2 for test
         uniswapV2Factory = IUniswapV2Factory(deployCode("./test/UniswapV2Factory.json", abi.encode(address(0))));
@@ -101,12 +101,7 @@ contract CounterTest is Test, Deployers {
     }
 
     function testCounterHooks() public {
-        // positions were created in setup()
-        assertEq(hook.beforeAddLiquidityCount(poolId), 1);
-        assertEq(hook.beforeRemoveLiquidityCount(poolId), 0);
-
-        assertEq(hook.beforeSwapCount(poolId), 0);
-        assertEq(hook.afterSwapCount(poolId), 0);
+  
 
         // Perform a test swap //
         uint256 amountIn = 1e18;
@@ -123,15 +118,11 @@ contract CounterTest is Test, Deployers {
 
         assertEq(int256(swapDelta.amount0()), -int256(amountIn));
 
-        assertEq(hook.beforeSwapCount(poolId), 1);
-        assertEq(hook.afterSwapCount(poolId), 1);
     }
 
     function testLiquidityHooks() public {
         // positions were created in setup()
-        assertEq(hook.beforeAddLiquidityCount(poolId), 1);
-        assertEq(hook.beforeRemoveLiquidityCount(poolId), 0);
-
+       
         // remove liquidity
         uint256 liquidityToRemove = 1e18;
         positionManager.decreaseLiquidity(
@@ -144,7 +135,5 @@ contract CounterTest is Test, Deployers {
             Constants.ZERO_BYTES
         );
 
-        assertEq(hook.beforeAddLiquidityCount(poolId), 1);
-        assertEq(hook.beforeRemoveLiquidityCount(poolId), 1);
     }
 }
