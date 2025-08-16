@@ -1,0 +1,17 @@
+{
+  "lib/uniswap-hooks": {
+    "rev": "70f4973c837505965b70886c6108366941554afb"
+  },
+  "lib/v2-core": {
+    "tag": {
+      "name": "v1.0.1",
+      "rev": "4dd59067c76dea4a0e8e4bfdda41877a6b16dedc"
+    }
+  },
+  "lib/hookmate": {
+    "rev": "776a715181b510d3fceebae54eb153026d7aeadd"
+  },
+  "lib/forge-std": {
+    "rev": "ee93fdc45d1e5e4dee883afe0103109881a83549"
+  }
+}
