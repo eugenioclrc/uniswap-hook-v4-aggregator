@@ -29,6 +29,7 @@ import {WETH} from "solmate/src/tokens/WETH.sol";
 import {MockRETH} from "./Mocks/rETH.sol";
 import {MockWeETH} from "./Mocks/weETH.sol";
 import {MockWstETH} from "./Mocks/wstETH.sol";
+import {ChainlinkFeedMock} from "./Mocks/ChainlinkFeedMock.sol";
 
 contract MasterHookTest is Test, Deployers {
     using EasyPosm for IPositionManager;
@@ -115,6 +116,19 @@ contract MasterHookTest is Test, Deployers {
         deployCodeTo("Mocks/rETH.sol:MockRETH", hex"", 0, t2);
         // weETH (Ether.fi Wrapped eETH)
         deployCodeTo("Mocks/weETH.sol:MockWeETH", hex"", 0, t3);
+
+        address oracleSTETH_ETH = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
+        address oracleRETH_ETH = 0x536218f9E9Eb48863970252233c8F271f554C2d0;
+        address oracleWEETH_ETH = 0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22;
+
+        deployCodeTo("Mocks/ChainlinkFeedMock.sol:ChainlinkFeedMock", abi.encode(uint8(18)), 0, oracleSTETH_ETH);
+        ChainlinkFeedMock(oracleSTETH_ETH).setValue(997893984522322600);
+
+        deployCodeTo("Mocks/ChainlinkFeedMock.sol:ChainlinkFeedMock", abi.encode(uint8(18)), 0, oracleRETH_ETH);
+        ChainlinkFeedMock(oracleRETH_ETH).setValue(1138254170824965400);
+
+        deployCodeTo("Mocks/ChainlinkFeedMock.sol:ChainlinkFeedMock", abi.encode(uint8(18)), 0, oracleWEETH_ETH);
+        ChainlinkFeedMock(oracleWEETH_ETH).setValue(1072310395932459800);
     }
 
     function testCounterHooks() public {
