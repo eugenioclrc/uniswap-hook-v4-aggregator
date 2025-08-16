@@ -25,9 +25,7 @@ contract Vault is ERC4626 {
 
     address public owner;
 
-    constructor(address _asset,
-        string memory _name,
-        string memory _symbol) ERC4626(ERC20(_asset), _name, _symbol) {
+    constructor(address _asset, string memory _name, string memory _symbol) ERC4626(ERC20(_asset), _name, _symbol) {
         owner = msg.sender;
     }
 

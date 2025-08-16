@@ -6,11 +6,10 @@ import {ERC20} from "solmate/src/tokens/ERC20.sol";
 contract MockWstETH is ERC20 {
     constructor() ERC20("Wrapped stETH", "wstETH", 18) {}
 
-    function deposit(uint256 amount) external {
-        _mint(msg.sender, amount);
-    }
+    function getStETHByWstETH(uint256 _wstETHAmount) public pure returns (uint256) {
+        if (_wstETHAmount == 0) return 0;
 
-    function withdraw(uint256 amount) external {
-        _burn(msg.sender, amount);
+        uint256 EXCHANGE_RATE = 11e17;
+        return (_wstETHAmount * EXCHANGE_RATE) / 1e18;
     }
 }

@@ -16,7 +16,6 @@ import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {LiquidityAmounts} from "@uniswap/v4-core/test/utils/LiquidityAmounts.sol";
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 import {Constants} from "@uniswap/v4-core/test/utils/Constants.sol";
-import {WETH} from "solmate/src/tokens/WETH.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {EasyPosm} from "./utils/libraries/EasyPosm.sol";
@@ -25,6 +24,11 @@ import {Deployers} from "./utils/Deployers.sol";
 import {MasterHook} from "../src/MasterHook.sol";
 
 import {console} from "forge-std/console.sol";
+
+import {WETH} from "solmate/src/tokens/WETH.sol";
+import {MockRETH} from "./Mocks/rETH.sol";
+import {MockWeETH} from "./Mocks/weETH.sol";
+import {MockWstETH} from "./Mocks/wstETH.sol";
 
 contract MasterHookTest is Test, Deployers {
     using EasyPosm for IPositionManager;
@@ -51,8 +55,6 @@ contract MasterHookTest is Test, Deployers {
         deployArtifacts();
 
         deployMockTokens();
-
-        
 
         (currency0, currency1) = deployCurrencyPair();
 
@@ -97,10 +99,22 @@ contract MasterHookTest is Test, Deployers {
     }
 
     function deployMockTokens() internal {
+        // WETH
+        address t0 = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+        // wstETH (Lido Wrapped stETH)
+        address t1 = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
+        // rETH (Rocket Pool ETH)
+        address t2 = 0xae78736Cd615f374D3085123A210448E74Fc6393;
+        // weETH (Ether.fi Wrapped eETH)
+        address t3 = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
 
-        deployCodeTo("WETH.sol:WETH",hex"",0, 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-        
-       
+        deployCodeTo("WETH.sol:WETH", hex"", 0, t0);
+        // wstETH (Lido Wrapped stETH)
+        deployCodeTo("Mocks/wstETH.sol:MockWstETH", hex"", 0, t1);
+        // rETH (Rocket Pool ETH)
+        deployCodeTo("Mocks/rETH.sol:MockRETH", hex"", 0, t2);
+        // weETH (Ether.fi Wrapped eETH)
+        deployCodeTo("Mocks/weETH.sol:MockWeETH", hex"", 0, t3);
     }
 
     function testCounterHooks() public {
