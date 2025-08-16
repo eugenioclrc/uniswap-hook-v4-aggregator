@@ -189,6 +189,21 @@ contract MasterHook is BaseHook {
             // No JIT liquidity was added, nothing to do
             return (BaseHook.afterSwap.selector, 0);
         }
+
+        // should i do this to collect fees?
+        /*
+        poolManager.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({
+                tickLower: tickLower,
+                tickUpper: tickUpper,
+                liquidityDelta: 0,
+                salt: 0
+            }),
+            data
+        );
+        */
+
         (BalanceDelta _delta,) = poolManager.modifyLiquidity(
             key,
             ModifyLiquidityParams({
@@ -208,6 +223,7 @@ contract MasterHook is BaseHook {
         if (delta1 > 0) {
             key.currency1.take(poolManager, address(vault), uint256(delta1), false);
         }
+
 
         return (BaseHook.afterSwap.selector, 0);
     }

@@ -69,7 +69,7 @@ contract MasterHookTest is Test, Deployers {
         tickLower = TickMath.minUsableTick(poolKey.tickSpacing);
         tickUpper = TickMath.maxUsableTick(poolKey.tickSpacing);
 
-        uint128 liquidityAmount = 10e18;
+        uint128 liquidityAmount = 1 ether;
 
         (uint256 amount0Expected, uint256 amount1Expected) = LiquidityAmounts.getAmountsForLiquidity(
             Constants.SQRT_PRICE_1_1,
@@ -77,6 +77,7 @@ contract MasterHookTest is Test, Deployers {
             TickMath.getSqrtPriceAtTick(tickUpper),
             liquidityAmount
         );
+        console.log("l0",amount0Expected);
 
         (tokenId,) = positionManager.mint(
             poolKey,
@@ -117,13 +118,15 @@ contract MasterHookTest is Test, Deployers {
             deadline: block.timestamp + 1
         });
 
-        console.log("userBalance", poolKey.currency0.balanceOf(user));
-        console.log("userBalance", poolKey.currency1.balanceOf(user));
+        console.log("userBalance T0", poolKey.currency0.balanceOf(user));
+        console.log("userBalance T1", poolKey.currency1.balanceOf(user));
         vm.stopPrank();
         // ------------------- //
 
-        console.log(poolKey.currency0.balanceOf(address(hook.vault())));
-        console.log(poolKey.currency1.balanceOf(address(hook.vault())));
+        console.log("Vault T0", poolKey.currency0.balanceOf(address(hook.vault())));
+        console.log("Vault T1", poolKey.currency1.balanceOf(address(hook.vault())));
+        console.log("Hook T0", poolKey.currency0.balanceOf(address(hook)));
+        console.log("Hook T1", poolKey.currency1.balanceOf(address(hook)));
 
         assertEq(int256(swapDelta.amount0()), -int256(amountIn));
     }
@@ -149,13 +152,13 @@ contract MasterHookTest is Test, Deployers {
             deadline: block.timestamp + 1
         });
 
-        console.log("userBalance", poolKey.currency0.balanceOf(user));
-        console.log("userBalance", poolKey.currency1.balanceOf(user));
+        console.log("userBalance T0", poolKey.currency0.balanceOf(user));
+        console.log("userBalance T1", poolKey.currency1.balanceOf(user));
         vm.stopPrank();
         // ------------------- //
 
-        console.log(poolKey.currency0.balanceOf(address(hook.vault())));
-        console.log(poolKey.currency1.balanceOf(address(hook.vault())));
+        console.log("Vault T0", poolKey.currency0.balanceOf(address(hook.vault())));
+        console.log("Vault T1", poolKey.currency1.balanceOf(address(hook.vault())));
 
         assertEq(int256(swapDelta.amount0()), -int256(amountIn));
     }
