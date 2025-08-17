@@ -9,6 +9,8 @@ import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 
 import {IPool} from "./interfaces/aave-v3-IPool.sol";
 
+import {console} from "forge-std/console.sol";
+
 contract Vault is ERC4626 {
     using SafeTransferLib for ERC20;
 
@@ -38,19 +40,19 @@ contract Vault is ERC4626 {
     constructor(address _asset, string memory _name, string memory _symbol) ERC4626(ERC20(_asset), _name, _symbol) {
         _owner = msg.sender;
 
-        IERC20(t0).approve(address(POOL_AAVE), type(uint256).max);
-        IERC20(t1).approve(address(POOL_AAVE), type(uint256).max);
-        IERC20(t2).approve(address(POOL_AAVE), type(uint256).max);
-        IERC20(t3).approve(address(POOL_AAVE), type(uint256).max);
+        ERC20(t0).approve(address(POOL_AAVE), type(uint256).max);
+        ERC20(t1).approve(address(POOL_AAVE), type(uint256).max);
+        ERC20(t2).approve(address(POOL_AAVE), type(uint256).max);
+        ERC20(t3).approve(address(POOL_AAVE), type(uint256).max);
 
         IPool.ReserveData memory _data = POOL_AAVE.getReserveData(t0);
-        at0Supply = IERC20(_data.aTokenAddress);
+        at0Supply = ERC20(_data.aTokenAddress);
         _data = POOL_AAVE.getReserveData(t1);
-        at1Supply = IERC20(_data.aTokenAddress);
+        at1Supply = ERC20(_data.aTokenAddress);
         _data = POOL_AAVE.getReserveData(t2);
-        at2Supply = IERC20(_data.aTokenAddress);
+        at2Supply = ERC20(_data.aTokenAddress);
         _data = POOL_AAVE.getReserveData(t3);
-        at3Supply = IERC20(_data.aTokenAddress);
+        at3Supply = ERC20(_data.aTokenAddress);
     }
 
     function get(address token, uint256 amount) external {
@@ -115,38 +117,61 @@ contract Vault is ERC4626 {
 
     function _transferAssets(address receiver, uint256 assets) internal {
         //asset.safeTransfer(receiver, assets);
-        uint256 balanceT0 = IERC20(t0).balanceOf(address(this));
+        uint256 balanceT0 = at0Supply.balanceOf(address(this));
         uint256 balanceT1 = get_wstETH_ETH();
-        uint256 balanceT2 = getNormalized(t2, oracleRETH_ETH);
-        uint256 balanceT3 = getNormalized(t3, oracleWEETH_ETH);
+        uint256 balanceT2 = getNormalized(address(at2Supply), oracleRETH_ETH);
+        uint256 balanceT3 = getNormalized(address(at3Supply), oracleWEETH_ETH);
+
+        console.log("contratto T2", at2Supply.balanceOf(address(this)));
 
         uint256 _totalAssets = totalAssets();
 
-        pool.withdraw(t0, (assets * balanceT0) / _totalAssets);
-        pool.withdraw(t1, (assets * balanceT1) / _totalAssets);
-        pool.withdraw(t2, (assets * balanceT2) / _totalAssets);
-        pool.withdraw(t3, (assets * balanceT3) / _totalAssets);
+        balanceT0 = (assets * balanceT0) / _totalAssets;
+        if(balanceT0 > 0) POOL_AAVE.withdraw(t0, balanceT0, receiver);
+
+        balanceT1 = (assets * balanceT1) / _totalAssets;
+        console.log("wstETH transfer", balanceT1);
+        if(balanceT1 > 0) {
+            uint256 price = getChainlinkDataFeedLatestAnswer(oracleSTETH_ETH);
+            balanceT1 = (balanceT1 * 10 ** 18) / price;
+            POOL_AAVE.withdraw(t1, IWstETH(t1).getStETHByWstETH(balanceT1), receiver);
+        }
+
+        balanceT2 = (assets * balanceT2) / _totalAssets;
+        if(balanceT2 > 0) {
+            uint256 price = getChainlinkDataFeedLatestAnswer(oracleRETH_ETH);
+            POOL_AAVE.withdraw(t2, (balanceT2 * 10 ** 18) / price, receiver);
+        }
+
+        balanceT3 = (assets * balanceT3) / _totalAssets;
+        if(balanceT3 > 0) {
+            uint256 price = getChainlinkDataFeedLatestAnswer(oracleWEETH_ETH);
+            POOL_AAVE.withdraw(t3, (balanceT3 * 10 ** 18) / price, receiver);
+        }
     }
 
     function totalAssets() public view override returns (uint256) {
-        (uint256 totalCollateral,,,,,) = pool.getUserAccountData(address(this));
-        // totalCollateral is in 1e8 (usd)
+       uint256 _totalAssets = 
+       at0Supply.balanceOf(address(this)) +
+       get_wstETH_ETH() +
+       getNormalized(address(at2Supply), oracleRETH_ETH) +
+       getNormalized(address(at3Supply), oracleWEETH_ETH);
 
-        //demo response  ethPrice = 440630972843 / 4406,30 per ETH
-        uint256 ethPrice = getChainlinkDataFeedLatestAnswer(oracleETH_USD);
-
-        // totalCollateral in 1e8 usd to ETH
-        return totalCollateral * 10 ** 18 / ethPrice;
+       return _totalAssets;
     }
 
     function get_wstETH_ETH() internal view returns (uint256) {
-        uint256 amount = IERC20(t1).balanceOf(address(this));
+        uint256 amount = at1Supply.balanceOf(address(this));
         uint256 price = getChainlinkDataFeedLatestAnswer(oracleSTETH_ETH);
         return IWstETH(t1).getStETHByWstETH(amount) * price / 10 ** 18;
     }
 
     function getNormalized(address token, AggregatorV3Interface oracle) internal view returns (uint256) {
+        console.log("token balance", token) ;
+
         uint256 amount = IERC20(token).balanceOf(address(this));
+        console.log(amount);
+        console.log("*********");
         uint256 price = getChainlinkDataFeedLatestAnswer(oracle);
         return amount * price / 10 ** 18;
     }
