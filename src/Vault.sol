@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC4626, ERC20} from "solmate/src/mixins/ERC4626.sol";
 import {AggregatorV3Interface} from "lib/chainlink-evm/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import {IWstETH} from "@uniswap/v4-periphery/src/interfaces/external/IWstETH.sol";
 
 contract Vault is ERC4626 {
     using SafeERC20 for IERC20;
@@ -19,9 +20,9 @@ contract Vault is ERC4626 {
     address constant t3 = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
 
     // oracles
-    address constant oracleSTETH_ETH = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
-    address constant oracleRETH_ETH = 0x536218f9E9Eb48863970252233c8F271f554C2d0;
-    address constant oracleWEETH_ETH = 0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22;
+    AggregatorV3Interface constant oracleSTETH_ETH = AggregatorV3Interface(0x86392dC19c0b719886221c78AB11eb8Cf5c52812);
+    AggregatorV3Interface constant oracleRETH_ETH = AggregatorV3Interface(0x536218f9E9Eb48863970252233c8F271f554C2d0);
+    AggregatorV3Interface constant oracleWEETH_ETH = AggregatorV3Interface(0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22);
 
     address public owner;
 
@@ -37,33 +38,25 @@ contract Vault is ERC4626 {
 
     function totalAssets() public view override returns (uint256) {
         return IERC20(t0).balanceOf(address(this)) + 
-            get_wstETH_ETH(IERC20(t1).balanceOf(address(this))) + 
-            get_RETH_ETH(IERC20(t2).balanceOf(address(this))) + 
-            get_weETH_ETH(IERC20(t3).balanceOf(address(this)));
+            get_wstETH_ETH() +
+            getNormalized(t2, oracleRETH_ETH) + 
+            getNormalized(t3, oracleWEETH_ETH);
     }
 
-    function get_wstETH_ETH(uint256 amount) internal view returns (uint256) {
-        // wstETH to STETH
-        amount = t1.getStETHByWstETH(amount);
-        // STETH to ETH
-        uint256 price = getChainlinkDataFeedLatestAnswer(dataFeed_STETH_ETH);
+    function get_wstETH_ETH() internal view returns (uint256) {
+        uint256 amount = IERC20(t1).balanceOf(address(this));
+        uint256 price = getChainlinkDataFeedLatestAnswer(oracleSTETH_ETH);
+        return IWstETH(t1).getStETHByWstETH(amount) * price;
+    }
 
+    function getNormalized(address token, AggregatorV3Interface oracle) internal view returns (uint256) {
+        uint256 amount = IERC20(token).balanceOf(address(this));
+        uint256 price = getChainlinkDataFeedLatestAnswer(oracle);
         return amount * price;
     }
 
-    function get_RETH_ETH(uint256 amount) internal view returns (uint256) {
-        uint256 price = getChainlinkDataFeedLatestAnswer(dataFeed_STETH_ETH);
 
-        return amount * price;
-    }
-
-    function get_weETH_ETH(uint256 amount) internal view returns (uint256) {
-        uint256 price = getChainlinkDataFeedLatestAnswer(dataFeed_STETH_ETH);
-
-        return amount * price;
-    }
-
-    function getChainlinkDataFeedLatestAnswer(AggregatorV3Interface dataFeed) internal view returns (int) {
+    function getChainlinkDataFeedLatestAnswer(AggregatorV3Interface dataFeed) internal view returns (uint256) {
         // prettier-ignore
         (
             /* uint80 roundId */,
@@ -72,7 +65,9 @@ contract Vault is ERC4626 {
             /*uint256 updatedAt*/,
             /*uint80 answeredInRound*/
         ) = dataFeed.latestRoundData();
-     
-        return answer;
+
+        // todo check answers
+
+        return uint256(answer);
     }
 }
