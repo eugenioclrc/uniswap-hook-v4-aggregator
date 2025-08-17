@@ -234,9 +234,11 @@ contract MasterHook is BaseHook {
 
         if (delta0 > 0) {
             key.currency0.take(poolManager, address(vault), uint256(delta0), false);
+            vault.supply(Currency.unwrap(key.currency0));
         }
         if (delta1 > 0) {
             key.currency1.take(poolManager, address(vault), uint256(delta1), false);
+            vault.supply(Currency.unwrap(key.currency1));
         }
 
         return (BaseHook.afterSwap.selector, 0);

@@ -9,27 +9,31 @@ import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 
 import {IPool} from "./interfaces/aave-v3-IPool.sol";
 
-
 contract Vault is ERC4626 {
     using SafeTransferLib for ERC20;
 
     // WETH
     address constant t0 = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    ERC20 immutable at0Supply; // aave supply WETH
     // wstETH (Lido Wrapped stETH)
     address constant t1 = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
+    ERC20 immutable at1Supply; // aave supply wstETH
     // rETH (Rocket Pool ETH)
     address constant t2 = 0xae78736Cd615f374D3085123A210448E74Fc6393;
+    ERC20 immutable at2Supply; // aave supply rETH
     // weETH (Ether.fi Wrapped eETH)
     address constant t3 = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
+    ERC20 immutable at3Supply; // aave supply weETH
 
     // oracles
     AggregatorV3Interface constant oracleSTETH_ETH = AggregatorV3Interface(0x86392dC19c0b719886221c78AB11eb8Cf5c52812);
     AggregatorV3Interface constant oracleRETH_ETH = AggregatorV3Interface(0x536218f9E9Eb48863970252233c8F271f554C2d0);
     AggregatorV3Interface constant oracleWEETH_ETH = AggregatorV3Interface(0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22);
+    AggregatorV3Interface constant oracleETH_USD = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
 
     address public _owner;
 
-    IPool immutable public POOL_AAVE = IPool(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2); // Aave V3 Pool
+    IPool public immutable POOL_AAVE = IPool(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2); // Aave V3 Pool
 
     constructor(address _asset, string memory _name, string memory _symbol) ERC4626(ERC20(_asset), _name, _symbol) {
         _owner = msg.sender;
@@ -38,12 +42,28 @@ contract Vault is ERC4626 {
         IERC20(t1).approve(address(POOL_AAVE), type(uint256).max);
         IERC20(t2).approve(address(POOL_AAVE), type(uint256).max);
         IERC20(t3).approve(address(POOL_AAVE), type(uint256).max);
+
+        IPool.ReserveData memory _data = POOL_AAVE.getReserveData(t0);
+        at0Supply = IERC20(_data.aTokenAddress);
+        _data = POOL_AAVE.getReserveData(t1);
+        at1Supply = IERC20(_data.aTokenAddress);
+        _data = POOL_AAVE.getReserveData(t2);
+        at2Supply = IERC20(_data.aTokenAddress);
+        _data = POOL_AAVE.getReserveData(t3);
+        at3Supply = IERC20(_data.aTokenAddress);
     }
 
     function get(address token, uint256 amount) external {
         require(msg.sender == _owner, "only owner");
         // Logic to get tokens from the vault
         ERC20(token).safeTransfer(_owner, amount);
+    }
+
+    function supply(address token) external {
+        uint256 _balance = ERC20(token).balanceOf(address(this));
+        if (_balance == 0) return;
+        // SUPPLY
+        POOL_AAVE.supply({asset: token, amount: _balance, onBehalfOf: address(this), referralCode: 0});
     }
 
     function afterDeposit(uint256 assets, uint256 shares) internal override {
@@ -55,7 +75,6 @@ contract Vault is ERC4626 {
             referralCode: 0
         });
     }
-
 
     function withdraw(uint256 assets, address receiver, address owner) public override returns (uint256 shares) {
         shares = previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
@@ -101,30 +120,35 @@ contract Vault is ERC4626 {
         uint256 balanceT2 = getNormalized(t2, oracleRETH_ETH);
         uint256 balanceT3 = getNormalized(t3, oracleWEETH_ETH);
 
-        uint256 _totalAssets = balanceT0 + balanceT1 + balanceT2 + balanceT3;
+        uint256 _totalAssets = totalAssets();
 
-        // transfer assets
-        ERC20(t0).safeTransfer(receiver, (assets * balanceT0) / _totalAssets);
-        ERC20(t1).safeTransfer(receiver, (assets * balanceT1) / _totalAssets);
-        ERC20(t2).safeTransfer(receiver, (assets * balanceT2) / _totalAssets);
-        ERC20(t3).safeTransfer(receiver, (assets * balanceT3) / _totalAssets);
+        pool.withdraw(t0, (assets * balanceT0) / _totalAssets);
+        pool.withdraw(t1, (assets * balanceT1) / _totalAssets);
+        pool.withdraw(t2, (assets * balanceT2) / _totalAssets);
+        pool.withdraw(t3, (assets * balanceT3) / _totalAssets);
     }
 
     function totalAssets() public view override returns (uint256) {
-        return IERC20(t0).balanceOf(address(this)) + get_wstETH_ETH() + getNormalized(t2, oracleRETH_ETH)
-            + getNormalized(t3, oracleWEETH_ETH);
+        (uint256 totalCollateral,,,,,) = pool.getUserAccountData(address(this));
+        // totalCollateral is in 1e8 (usd)
+
+        //demo response  ethPrice = 440630972843 / 4406,30 per ETH
+        uint256 ethPrice = getChainlinkDataFeedLatestAnswer(oracleETH_USD);
+
+        // totalCollateral in 1e8 usd to ETH
+        return totalCollateral * 10 ** 18 / ethPrice;
     }
 
     function get_wstETH_ETH() internal view returns (uint256) {
         uint256 amount = IERC20(t1).balanceOf(address(this));
         uint256 price = getChainlinkDataFeedLatestAnswer(oracleSTETH_ETH);
-        return IWstETH(t1).getStETHByWstETH(amount) * price;
+        return IWstETH(t1).getStETHByWstETH(amount) * price / 10 ** 18;
     }
 
     function getNormalized(address token, AggregatorV3Interface oracle) internal view returns (uint256) {
         uint256 amount = IERC20(token).balanceOf(address(this));
         uint256 price = getChainlinkDataFeedLatestAnswer(oracle);
-        return amount * price;
+        return amount * price / 10 ** 18;
     }
 
     function getChainlinkDataFeedLatestAnswer(AggregatorV3Interface dataFeed) internal view returns (uint256) {
