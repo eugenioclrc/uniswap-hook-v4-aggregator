@@ -7,6 +7,9 @@ import {AggregatorV3Interface} from "lib/chainlink-evm/contracts/src/v0.8/shared
 import {IWstETH} from "@uniswap/v4-periphery/src/interfaces/external/IWstETH.sol";
 import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 
+import {IPool} from "./interfaces/aave-v3-IPool.sol";
+
+
 contract Vault is ERC4626 {
     using SafeTransferLib for ERC20;
 
@@ -26,8 +29,15 @@ contract Vault is ERC4626 {
 
     address public _owner;
 
+    IPool immutable public POOL_AAVE = IPool(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2); // Aave V3 Pool
+
     constructor(address _asset, string memory _name, string memory _symbol) ERC4626(ERC20(_asset), _name, _symbol) {
         _owner = msg.sender;
+
+        IERC20(t0).approve(address(POOL_AAVE), type(uint256).max);
+        IERC20(t1).approve(address(POOL_AAVE), type(uint256).max);
+        IERC20(t2).approve(address(POOL_AAVE), type(uint256).max);
+        IERC20(t3).approve(address(POOL_AAVE), type(uint256).max);
     }
 
     function get(address token, uint256 amount) external {
@@ -35,6 +45,17 @@ contract Vault is ERC4626 {
         // Logic to get tokens from the vault
         ERC20(token).safeTransfer(_owner, amount);
     }
+
+    function afterDeposit(uint256 assets, uint256 shares) internal override {
+        // SUPPLY WETH
+        POOL_AAVE.supply({
+            asset: t0,
+            amount: ERC20(t0).balanceOf(address(this)),
+            onBehalfOf: address(this),
+            referralCode: 0
+        });
+    }
+
 
     function withdraw(uint256 assets, address receiver, address owner) public override returns (uint256 shares) {
         shares = previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
