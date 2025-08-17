@@ -67,7 +67,7 @@ contract IntegrationVaultTest is Test {
             HookMiner.find(address(this), /*CREATE2_FACTORY*/ flags, type(MasterHook).creationCode, constructorArgs);
 
         // Deploy the hook using CREATE2
-         hook = new MasterHook{salt: salt}(poolManager);
+        hook = new MasterHook{salt: salt}(poolManager);
 
         vault = hook.vault();
     }
@@ -89,8 +89,7 @@ contract IntegrationVaultTest is Test {
 
         assertApproxEqAbs(vault.totalAssets(), 10 ether, 3);
         assertEq(vault.totalSupply(), 10 ether);
-  
-    
+
         // lets add 10 ether into the pool
         deal(t2, address(vault), 10 ether);
         vm.prank(address(vault));
@@ -99,7 +98,7 @@ contract IntegrationVaultTest is Test {
         // greater than 20 ether (wstETH worths more than one ether)
         assertGt(vault.totalAssets(), 20 ether);
         assertEq(vault.totalSupply(), 10 ether);
-  
+
         // redeem
         vm.startPrank(user);
         vault.redeem(10 ether, address(0xdead), user);
@@ -109,7 +108,5 @@ contract IntegrationVaultTest is Test {
 
         //assertEq(vault.totalAssets(), 0);
         //assertEq(vault.totalSupply(), 0);
-
-
     }
 }
