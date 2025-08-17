@@ -2,13 +2,13 @@
 pragma solidity ^0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC4626, ERC20} from "solmate/src/mixins/ERC4626.sol";
 import {AggregatorV3Interface} from "lib/chainlink-evm/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {IWstETH} from "@uniswap/v4-periphery/src/interfaces/external/IWstETH.sol";
+import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 
 contract Vault is ERC4626 {
-    using SafeERC20 for IERC20;
+    using SafeTransferLib for ERC20;
 
     // WETH
     address constant t0 = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
@@ -24,23 +24,74 @@ contract Vault is ERC4626 {
     AggregatorV3Interface constant oracleRETH_ETH = AggregatorV3Interface(0x536218f9E9Eb48863970252233c8F271f554C2d0);
     AggregatorV3Interface constant oracleWEETH_ETH = AggregatorV3Interface(0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22);
 
-    address public owner;
+    address public _owner;
 
     constructor(address _asset, string memory _name, string memory _symbol) ERC4626(ERC20(_asset), _name, _symbol) {
-        owner = msg.sender;
+        _owner = msg.sender;
     }
 
     function get(address token, uint256 amount) external {
-        require(msg.sender == owner, "only owner");
+        require(msg.sender == _owner, "only owner");
         // Logic to get tokens from the vault
-        IERC20(token).safeTransfer(owner, amount);
+        ERC20(token).safeTransfer(_owner, amount);
+    }
+
+    function withdraw(uint256 assets, address receiver, address owner) public override returns (uint256 shares) {
+        shares = previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
+
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+
+        beforeWithdraw(assets, shares);
+
+        _burn(owner, shares);
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+
+        _transferAssets(owner, assets);
+    }
+
+    function redeem(uint256 shares, address receiver, address owner) public override returns (uint256 assets) {
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
+
+        // Check for rounding error since we round down in previewRedeem.
+        require((assets = previewRedeem(shares)) != 0, "ZERO_ASSETS");
+
+        beforeWithdraw(assets, shares);
+
+        _burn(owner, shares);
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+
+        _transferAssets(receiver, assets);
+    }
+
+    function _transferAssets(address receiver, uint256 assets) internal {
+        //asset.safeTransfer(receiver, assets);
+        uint256 balanceT0 = IERC20(t0).balanceOf(address(this));
+        uint256 balanceT1 = get_wstETH_ETH();
+        uint256 balanceT2 = getNormalized(t2, oracleRETH_ETH);
+        uint256 balanceT3 = getNormalized(t3, oracleWEETH_ETH);
+
+        uint256 _totalAssets = balanceT0 + balanceT1 + balanceT2 + balanceT3;
+
+        // transfer assets
+        ERC20(t0).safeTransfer(receiver, (assets * balanceT0) / _totalAssets);
+        ERC20(t1).safeTransfer(receiver, (assets * balanceT1) / _totalAssets);
+        ERC20(t2).safeTransfer(receiver, (assets * balanceT2) / _totalAssets);
+        ERC20(t3).safeTransfer(receiver, (assets * balanceT3) / _totalAssets);
     }
 
     function totalAssets() public view override returns (uint256) {
-        return IERC20(t0).balanceOf(address(this)) + 
-            get_wstETH_ETH() +
-            getNormalized(t2, oracleRETH_ETH) + 
-            getNormalized(t3, oracleWEETH_ETH);
+        return IERC20(t0).balanceOf(address(this)) + get_wstETH_ETH() + getNormalized(t2, oracleRETH_ETH)
+            + getNormalized(t3, oracleWEETH_ETH);
     }
 
     function get_wstETH_ETH() internal view returns (uint256) {
@@ -55,14 +106,16 @@ contract Vault is ERC4626 {
         return amount * price;
     }
 
-
     function getChainlinkDataFeedLatestAnswer(AggregatorV3Interface dataFeed) internal view returns (uint256) {
         // prettier-ignore
         (
-            /* uint80 roundId */,
+            /* uint80 roundId */
+            ,
             int256 answer,
-            /*uint256 startedAt*/,
-            /*uint256 updatedAt*/,
+            /*uint256 startedAt*/
+            ,
+            /*uint256 updatedAt*/
+            ,
             /*uint80 answeredInRound*/
         ) = dataFeed.latestRoundData();
 
