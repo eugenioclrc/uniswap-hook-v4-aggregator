@@ -36,6 +36,43 @@ contract Vault is ERC4626 {
     }
 
     function totalAssets() public view override returns (uint256) {
-        return 0;
+        return IERC20(t0).balanceOf(address(this)) + 
+            get_wstETH_ETH(IERC20(t1).balanceOf(address(this))) + 
+            get_RETH_ETH(IERC20(t2).balanceOf(address(this))) + 
+            get_weETH_ETH(IERC20(t3).balanceOf(address(this)));
+    }
+
+    function get_wstETH_ETH(uint256 amount) internal view returns (uint256) {
+        // wstETH to STETH
+        amount = t1.getStETHByWstETH(amount);
+        // STETH to ETH
+        uint256 price = getChainlinkDataFeedLatestAnswer(dataFeed_STETH_ETH);
+
+        return amount * price;
+    }
+
+    function get_RETH_ETH(uint256 amount) internal view returns (uint256) {
+        uint256 price = getChainlinkDataFeedLatestAnswer(dataFeed_STETH_ETH);
+
+        return amount * price;
+    }
+
+    function get_weETH_ETH(uint256 amount) internal view returns (uint256) {
+        uint256 price = getChainlinkDataFeedLatestAnswer(dataFeed_STETH_ETH);
+
+        return amount * price;
+    }
+
+    function getChainlinkDataFeedLatestAnswer(AggregatorV3Interface dataFeed) internal view returns (int) {
+        // prettier-ignore
+        (
+            /* uint80 roundId */,
+            int256 answer,
+            /*uint256 startedAt*/,
+            /*uint256 updatedAt*/,
+            /*uint80 answeredInRound*/
+        ) = dataFeed.latestRoundData();
+     
+        return answer;
     }
 }
