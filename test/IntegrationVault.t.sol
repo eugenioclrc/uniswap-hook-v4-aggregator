@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Test, console2} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
+import {console} from "forge-std/console.sol";
 
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {CurrencyLibrary, Currency} from "@uniswap/v4-core/src/types/Currency.sol";
-import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {LiquidityAmounts} from "@uniswap/v4-core/test/utils/LiquidityAmounts.sol";
-import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 import {Constants} from "@uniswap/v4-core/test/utils/Constants.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -22,8 +20,6 @@ import {EasyPosm} from "./utils/libraries/EasyPosm.sol";
 import {Deployers} from "./utils/Deployers.sol";
 
 import {MasterHook} from "../src/MasterHook.sol";
-
-import {console} from "forge-std/console.sol";
 
 import {IPermit2} from "permit2/src/interfaces/IPermit2.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
@@ -35,7 +31,7 @@ import {Vault} from "../src/Vault.sol";
 
 
 contract IntegrationVaultTest is Test {
-        using EasyPosm for IPositionManager;
+    using EasyPosm for IPositionManager;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
     using StateLibrary for IPoolManager;
@@ -47,7 +43,7 @@ contract IntegrationVaultTest is Test {
 
     address user = makeAddr("user");
 
-     Currency currency0;
+    Currency currency0;
     Currency currency1;
 
     PoolKey poolKey;
@@ -76,7 +72,7 @@ contract IntegrationVaultTest is Test {
 
         // Mine a salt that will produce a hook address with the correct flags
         bytes memory constructorArgs = abi.encode(poolManager);
-        (address hookAddress, bytes32 salt) =
+        (, bytes32 salt) =
             HookMiner.find(address(this), /*CREATE2_FACTORY*/ flags, type(MasterHook).creationCode, constructorArgs);
 
         // Deploy the hook using CREATE2
@@ -118,15 +114,9 @@ contract IntegrationVaultTest is Test {
         vm.stopPrank();
 
         console.log("total assets after redeem", vault.totalAssets());
-
-
-        // lets do a swap!
     }
 
     function testSwap() public {
-
-        // add liquidity
-
         currency0 = Currency.wrap(t0);
         currency1 = Currency.wrap(t2);
 
@@ -136,7 +126,6 @@ contract IntegrationVaultTest is Test {
         setupApproves(t0);
         setupApproves(t2);
         poolManager.initialize(poolKey, Constants.SQRT_PRICE_1_1);
-
 
         deal(t0, address(this), 60 ether);
         deal(t2, address(this), 60 ether);
@@ -154,10 +143,10 @@ contract IntegrationVaultTest is Test {
             liquidityAmount
         );
 
-        (uint256 tokenId,) = positionManager.mint(
+        positionManager.mint(
             poolKey,
-            tickLower,
-            tickUpper,
+            -60,
+            60,
             liquidityAmount,
             amount0Expected + 1,
             amount1Expected + 1,
@@ -166,11 +155,8 @@ contract IntegrationVaultTest is Test {
             Constants.ZERO_BYTES
         );
 
-
-
-        vm.startPrank(user);
-        deal(t0, user, 150 ether);
-        deal(t2, user, 150 ether);
+        deal(t0, address(this), 100 ether);
+        deal(t2, address(this), 100 ether);
         IERC20(t0).approve(address(vault), type(uint256).max);
         vault.deposit(100 ether, user);
 
@@ -180,21 +166,29 @@ contract IntegrationVaultTest is Test {
         poolKey = PoolKey(currency1, currency0, 3000, 60, IHooks(hook));
         poolId = poolKey.toId();
 
+        vm.startPrank(user);
+        deal(t2, address(user), 50 ether);
+
+        IERC20(t0).approve(address(vault), type(uint256).max);
+        IERC20(t2).approve(address(vault), type(uint256).max);
+
         IERC20(Currency.unwrap(poolKey.currency0)).approve(address(swapRouter), type(uint256).max);
         IERC20(Currency.unwrap(poolKey.currency1)).approve(address(swapRouter), type(uint256).max);
 
+        console.log("Before user swap wETH to wstETH");
+        console.log("Vault assets:");
+        emit log_named_decimal_uint("   wETH bal  ", vault.getReserves(t0), 18);
+        emit log_named_decimal_uint("   wstETH bal", vault.getReserves(t1), 18);
+        emit log_named_decimal_uint("   rETH bal  ", vault.getReserves(t2), 18);
+        emit log_named_decimal_uint("   weETH bal ", vault.getReserves(t3), 18);
+        emit log_named_decimal_uint("   Total Assets  ", vault.totalAssets(), 18);
 
-        console.log("pre swap");
-        console.log("vault value", vault.totalAssets());
-        console.log("Vault T0", vault.getReserves(t0));
-        console.log("Vault T1", vault.getReserves(t1));
-        console.log("Vault T2", vault.getReserves(t2));
-        console.log("Vault T3", vault.getReserves(t3));
-        console.log("*********");
-
-           console.log("userBalance T0", poolKey.currency0.balanceOf(user));
-        console.log("userBalance T1", poolKey.currency1.balanceOf(user));
+        console.log("User assets:");
+        emit log_named_decimal_uint("   wETH bal", poolKey.currency1.balanceOf(user), 18);
+        emit log_named_decimal_uint("   rETH bal", poolKey.currency0.balanceOf(user), 18);
         
+        console.log("--------------------------------");
+
         // Perform a test swap from WETH to rETH
         uint256 amountIn = 50 ether;
         BalanceDelta swapDelta = swapRouter.swapExactTokensForTokens({
@@ -207,26 +201,16 @@ contract IntegrationVaultTest is Test {
             deadline: block.timestamp + 1
         });
 
-
-        console.log("after swap");
-        console.log("vault value", vault.totalAssets());
-        console.log("Vault T0", vault.getReserves(t0));
-        console.log("Vault T1", vault.getReserves(t1));
-        console.log("Vault T2", vault.getReserves(t2));
-        console.log("Vault T3", vault.getReserves(t3));
-        console.log("*********");
-
-         console.log("userBalance T0", poolKey.currency0.balanceOf(user));
-        console.log("userBalance T1", poolKey.currency1.balanceOf(user));
-
-        console.log("vault value", vault.totalAssets());
+        console.log("After user swap wETH to wstETH");
+        console.log("Vault assets:");
+        emit log_named_decimal_uint("   wETH bal  ", vault.getReserves(t0), 18);
+        emit log_named_decimal_uint("   wstETH bal", vault.getReserves(t1), 18);
+        emit log_named_decimal_uint("   rETH bal  ", vault.getReserves(t2), 18);
+        emit log_named_decimal_uint("   weETH bal ", vault.getReserves(t3), 18);
+        emit log_named_decimal_uint("   Total Assets  ", vault.totalAssets(), 18);
         
-        vm.stopPrank();
-        // ------------------- //
-
-        console.log("Vault T0", poolKey.currency0.balanceOf(address(hook.vault())));
-        console.log("Vault T1", poolKey.currency1.balanceOf(address(hook.vault())));
-        console.log("Hook T0", poolKey.currency0.balanceOf(address(hook)));
-        console.log("Hook T1", poolKey.currency1.balanceOf(address(hook)));
+        console.log("User assets:");
+        emit log_named_decimal_uint("   wETH bal", poolKey.currency1.balanceOf(user), 18);
+        emit log_named_decimal_uint("   rETH bal", poolKey.currency0.balanceOf(user), 18);        
     }
 }
