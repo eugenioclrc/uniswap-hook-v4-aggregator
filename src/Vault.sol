@@ -58,7 +58,9 @@ contract Vault is ERC4626 {
     function get(address token, uint256 amount) external {
         require(msg.sender == _owner, "only owner");
         // Logic to get tokens from the vault
-        ERC20(token).safeTransfer(_owner, amount);
+        require(token == t0 || token == t1 || token == t2 || token == t3, "Unknown token");
+
+            POOL_AAVE.withdraw(token, amount, _owner);
     }
 
     function supply(address token) external {
@@ -122,15 +124,12 @@ contract Vault is ERC4626 {
         uint256 balanceT2 = getNormalized(address(at2Supply), oracleRETH_ETH);
         uint256 balanceT3 = getNormalized(address(at3Supply), oracleWEETH_ETH);
 
-        console.log("contratto T2", at2Supply.balanceOf(address(this)));
-
         uint256 _totalAssets = totalAssets();
 
         balanceT0 = (assets * balanceT0) / _totalAssets;
         if (balanceT0 > 0) POOL_AAVE.withdraw(t0, balanceT0, receiver);
 
         balanceT1 = (assets * balanceT1) / _totalAssets;
-        console.log("wstETH transfer", balanceT1);
         if (balanceT1 > 0) {
             uint256 price = getChainlinkDataFeedLatestAnswer(oracleSTETH_ETH);
             balanceT1 = (balanceT1 * 10 ** 18) / price;
@@ -150,6 +149,14 @@ contract Vault is ERC4626 {
         }
     }
 
+    function getReserves(address token) external view returns (uint256) {
+        if (token == t0) return at0Supply.balanceOf(address(this));
+        if (token == t1) return at1Supply.balanceOf(address(this));
+        if (token == t2) return at2Supply.balanceOf(address(this));
+        if (token == t3) return at3Supply.balanceOf(address(this));
+        revert("Unknown token");
+    }
+
     function totalAssets() public view override returns (uint256) {
         uint256 _totalAssets = at0Supply.balanceOf(address(this)) + get_wstETH_ETH()
             + getNormalized(address(at2Supply), oracleRETH_ETH) + getNormalized(address(at3Supply), oracleWEETH_ETH);
@@ -164,11 +171,7 @@ contract Vault is ERC4626 {
     }
 
     function getNormalized(address token, AggregatorV3Interface oracle) internal view returns (uint256) {
-        console.log("token balance", token);
-
         uint256 amount = IERC20(token).balanceOf(address(this));
-        console.log(amount);
-        console.log("*********");
         uint256 price = getChainlinkDataFeedLatestAnswer(oracle);
         return amount * price / 10 ** 18;
     }

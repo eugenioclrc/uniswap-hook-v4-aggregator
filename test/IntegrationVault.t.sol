@@ -33,13 +33,26 @@ import {IUniswapV4Router04} from "hookmate/interfaces/router/IUniswapV4Router04.
 import {HookMiner} from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 import {Vault} from "../src/Vault.sol";
 
+
 contract IntegrationVaultTest is Test {
+        using EasyPosm for IPositionManager;
+    using PoolIdLibrary for PoolKey;
+    using CurrencyLibrary for Currency;
+    using StateLibrary for IPoolManager;
+
     IPermit2 constant permit2 = IPermit2(0x000000000022D473030F116dDEE9F6B43aC78BA3);
     IPoolManager constant poolManager = IPoolManager(0x000000000004444c5dc75cB358380D2e3dE08A90);
     IPositionManager constant positionManager = IPositionManager(0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e);
-    IUniswapV4Router04 constant swapRouter = IUniswapV4Router04(payable(0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af));
+    IUniswapV4Router04 constant swapRouter = IUniswapV4Router04(payable(0x00000000000044a361Ae3cAc094c9D1b14Eece97));
 
     address user = makeAddr("user");
+
+     Currency currency0;
+    Currency currency1;
+
+    PoolKey poolKey;
+
+    PoolId poolId;
 
     Vault vault;
     MasterHook hook;
@@ -106,7 +119,114 @@ contract IntegrationVaultTest is Test {
 
         console.log("total assets after redeem", vault.totalAssets());
 
-        //assertEq(vault.totalAssets(), 0);
-        //assertEq(vault.totalSupply(), 0);
+
+        // lets do a swap!
+    }
+
+    function testSwap() public {
+
+        // add liquidity
+
+        currency0 = Currency.wrap(t0);
+        currency1 = Currency.wrap(t2);
+
+        poolKey = PoolKey(currency1, currency0, 3000, 60, IHooks(hook));
+        poolId = poolKey.toId();
+
+        setupApproves(t0);
+        setupApproves(t2);
+        poolManager.initialize(poolKey, Constants.SQRT_PRICE_1_1);
+
+
+        deal(t0, address(this), 60 ether);
+        deal(t2, address(this), 60 ether);
+
+        // Provide full-range liquidity to the pool
+        int24 tickLower = TickMath.minUsableTick(poolKey.tickSpacing);
+        int24 tickUpper = TickMath.maxUsableTick(poolKey.tickSpacing);
+
+        uint128 liquidityAmount = 1 ether;
+
+        (uint256 amount0Expected, uint256 amount1Expected) = LiquidityAmounts.getAmountsForLiquidity(
+            Constants.SQRT_PRICE_1_1,
+            TickMath.getSqrtPriceAtTick(tickLower),
+            TickMath.getSqrtPriceAtTick(tickUpper),
+            liquidityAmount
+        );
+
+        (uint256 tokenId,) = positionManager.mint(
+            poolKey,
+            tickLower,
+            tickUpper,
+            liquidityAmount,
+            amount0Expected + 1,
+            amount1Expected + 1,
+            address(this),
+            block.timestamp,
+            Constants.ZERO_BYTES
+        );
+
+
+
+        vm.startPrank(user);
+        deal(t0, user, 150 ether);
+        deal(t2, user, 150 ether);
+        IERC20(t0).approve(address(vault), type(uint256).max);
+        vault.deposit(100 ether, user);
+
+        currency0 = Currency.wrap(t0);
+        currency1 = Currency.wrap(t2);
+
+        poolKey = PoolKey(currency1, currency0, 3000, 60, IHooks(hook));
+        poolId = poolKey.toId();
+
+        IERC20(Currency.unwrap(poolKey.currency0)).approve(address(swapRouter), type(uint256).max);
+        IERC20(Currency.unwrap(poolKey.currency1)).approve(address(swapRouter), type(uint256).max);
+
+
+        console.log("pre swap");
+        console.log("vault value", vault.totalAssets());
+        console.log("Vault T0", vault.getReserves(t0));
+        console.log("Vault T1", vault.getReserves(t1));
+        console.log("Vault T2", vault.getReserves(t2));
+        console.log("Vault T3", vault.getReserves(t3));
+        console.log("*********");
+
+           console.log("userBalance T0", poolKey.currency0.balanceOf(user));
+        console.log("userBalance T1", poolKey.currency1.balanceOf(user));
+        
+        // Perform a test swap from WETH to rETH
+        uint256 amountIn = 50 ether;
+        BalanceDelta swapDelta = swapRouter.swapExactTokensForTokens({
+            amountIn: amountIn,
+            amountOutMin: 0, // Very bad, but we want to allow for unlimited price impact
+            zeroForOne: true,
+            poolKey: poolKey,
+            hookData: Constants.ZERO_BYTES,
+            receiver: user,
+            deadline: block.timestamp + 1
+        });
+
+
+        console.log("after swap");
+        console.log("vault value", vault.totalAssets());
+        console.log("Vault T0", vault.getReserves(t0));
+        console.log("Vault T1", vault.getReserves(t1));
+        console.log("Vault T2", vault.getReserves(t2));
+        console.log("Vault T3", vault.getReserves(t3));
+        console.log("*********");
+
+         console.log("userBalance T0", poolKey.currency0.balanceOf(user));
+        console.log("userBalance T1", poolKey.currency1.balanceOf(user));
+
+        console.log("vault value", vault.totalAssets());
+        
+        vm.stopPrank();
+        // ------------------- //
+
+        console.log("Vault T0", poolKey.currency0.balanceOf(address(hook.vault())));
+        console.log("Vault T1", poolKey.currency1.balanceOf(address(hook.vault())));
+        console.log("Hook T0", poolKey.currency0.balanceOf(address(hook)));
+        console.log("Hook T1", poolKey.currency1.balanceOf(address(hook)));
     }
 }

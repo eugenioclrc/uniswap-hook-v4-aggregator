@@ -159,14 +159,10 @@ contract MasterHook is BaseHook {
             params.amountSpecified,
             key.fee
         );
-        // Read vault balances (caps)
-        uint256 vault0 = key.currency0.balanceOf(address(vault));
-        uint256 vault1 = key.currency1.balanceOf(address(vault));
-
         // Decide caps for the *outgoing* side of the swap to avoid over-adding.
         // We still pass both amounts into getLiquidityForAmounts so we never exceed vault funds on either side.
-        uint256 cap0 = vault0;
-        uint256 cap1 = vault1;
+        uint256 cap0 = vault.getReserves(Currency.unwrap(key.currency0));
+        uint256 cap1 = vault.getReserves(Currency.unwrap(key.currency1));
         if (params.zeroForOne) {
             // pool will pay out token1; don't try to supply more than stepOut from vault1
             if (cap1 > stepOut) cap1 = stepOut;
